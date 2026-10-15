@@ -15,6 +15,9 @@
 //!
 //! URL query flag: `?webgl` forces the WebGL2 backend instead of WebGPU.
 
+#[cfg(all(feature = "icp-cloud", any(target_arch = "wasm32", test)))]
+mod cloud;
+
 #[cfg(target_arch = "wasm32")]
 mod web;
 

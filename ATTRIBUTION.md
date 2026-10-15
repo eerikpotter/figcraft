@@ -1,5 +1,11 @@
 # Attribution
 
+## subnet.ee cloud integration
+
+| Asset | Author / source | Licence | Notes |
+|---|---|---|---|
+| `vendor/sovereign-cloud-ui/assets/icp/logo.svg` | DFINITY Foundation, via the subnet.ee shared cloud UI; see the adjacent README | Apache-2.0 | Original paths and colours, viewBox cropped by the shared package; licence included beside the asset |
+
 Every asset bundled in this repository (images, icons, fonts, data files) is listed here with its
 author, source and licence. `cargo xtask assets` fails if a file under `assets/`, `docs/brand/` or
 `docs/images/` is missing from this list.

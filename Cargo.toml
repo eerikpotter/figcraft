@@ -2,7 +2,7 @@
 resolver = "3"
 members = ["crates/*", "apps/*", "xtask"]
 # The plugin SDK and examples build for wasm32 in a workspace of their own (`cargo xtask plugins`).
-exclude = ["plugins"]
+exclude = ["plugins", "vendor/sovereign-cloud", "vendor/sovereign-cloud-ui"]
 # default-members = ["crates/*", "apps/figcraft", "apps/figcraft-cli", "xtask"]
 
 [workspace.package]

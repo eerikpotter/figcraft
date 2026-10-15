@@ -40,8 +40,26 @@ pub fn start() {
                     // on the socket wakes the page for a frame.
                     let ctx = cc.egui_ctx.clone();
                     session.live.install(Box::new(figcraft_collab_net::NetLink::new(std::sync::Arc::new(move || ctx.request_repaint()))));
-                    let fig = FigApp::new(session, Box::new(WebServices { reduce_motion, ctx: cc.egui_ctx.clone() }));
-                    Ok(Box::new(WebShell { fig }))
+                    #[allow(unused_mut)]
+                    let mut fig = FigApp::new(session, Box::new(WebServices { reduce_motion, ctx: cc.egui_ctx.clone() }));
+                    #[cfg(feature = "icp-cloud")]
+                    let cloud = {
+                        let cloud = sovereign_cloud_ui::Cloud::new(sovereign_cloud_ui::AppSpec::FIG, cc.egui_ctx.clone());
+                        let menu = cloud.menu_handle();
+                        fig.file_menu = Some(Box::new(move |ui, has_document| {
+                            figcraft_ui_egui::theme::on_dark(ui, |ui| {
+                                ui.spacing_mut().item_spacing = egui::vec2(8.0, 4.0);
+                                menu.ui(ui, has_document);
+                            });
+                            menu.has_pending()
+                        }));
+                        cloud
+                    };
+                    Ok(Box::new(WebShell {
+                        fig,
+                        #[cfg(feature = "icp-cloud")]
+                        cloud,
+                    }))
                 }),
             )
             .await;
@@ -60,12 +78,24 @@ fn query() -> String {
 
 struct WebShell {
     fig: FigApp,
+    #[cfg(feature = "icp-cloud")]
+    cloud: sovereign_cloud_ui::Cloud,
 }
 
 impl eframe::App for WebShell {
     // `FigApp::ui` runs its own per-frame logic first (fonts, theme), like the desktop app.
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.fig.ui(ui);
+        #[cfg(feature = "icp-cloud")]
+        self.cloud.ui(ui.ctx(), &mut crate::cloud::Adapter::new(&mut self.fig.session));
+        // Include every tab: navigating away must not discard another design or branch.
+        let dirty = self.fig.session.docs.iter().any(|d| d.is_dirty() || d.text_edit.is_some() || d.interaction.is_some());
+        if let Some(root) = web_sys::window().and_then(|w| w.document()).and_then(|d| d.document_element()) {
+            let value = if dirty { "true" } else { "false" };
+            if root.get_attribute("data-craft-dirty").as_deref() != Some(value) {
+                let _ = root.set_attribute("data-craft-dirty", value);
+            }
+        }
     }
 }
 

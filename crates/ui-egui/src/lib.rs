@@ -502,12 +502,17 @@ impl Default for UiState {
     }
 }
 
+/// Optional File-menu actions supplied by a platform host.
+pub type FileMenu = Box<dyn FnMut(&mut egui::Ui, bool) -> bool>;
+
 /// The whole FigCraft UI.
 pub struct FigApp {
     pub session: Session,
     pub ui: UiState,
     pub canvas: canvas::CanvasState,
     pub services: Box<dyn Services>,
+    /// Optional host actions after Save As; returns true when a host action was chosen.
+    pub file_menu: Option<FileMenu>,
     worker: Option<render_worker::Worker>,
     fonts_installed: bool,
     /// System faces for scripts the built-in fonts lack were added (after the font scan), with
@@ -547,6 +552,7 @@ impl FigApp {
             session,
             canvas: canvas::CanvasState::default(),
             services,
+            file_menu: None,
             worker: None,
             fonts_installed: false,
             script_fonts: None,

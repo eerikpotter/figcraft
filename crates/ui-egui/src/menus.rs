@@ -198,6 +198,12 @@ fn menu_level(app: &mut FigApp, ui: &mut Ui, prefix: &str) -> bool {
             if item(ui, &i18n::menu_item(m.id, m.label), crate::shortcuts::shortcut(m.id).unwrap_or(""), enabled, checked, &t) && enabled {
                 clicked = Some(m.id);
             }
+            if m.id == "file.saveAs"
+                && let Some(menu) = &mut app.file_menu
+                && menu(ui, app.session.ds().is_ok())
+            {
+                return true;
+            }
         } else if let Some(rest) = m.menu.strip_prefix(prefix).and_then(|r| r.strip_prefix('/')) {
             let sub = rest.split('/').next().unwrap_or(rest).to_string();
             if !subs.contains(&sub) {
@@ -215,6 +221,34 @@ fn menu_level(app: &mut FigApp, ui: &mut Ui, prefix: &str) -> bool {
         return true;
     }
     false
+}
+
+#[cfg(test)]
+mod host_menu_tests {
+    use super::*;
+    use std::{cell::Cell, rc::Rc};
+
+    #[test]
+    fn file_host_actions_work_with_and_without_a_document_and_close_the_menu() {
+        for has_document in [false, true] {
+            let session = if has_document { figcraft_engine::Session::new() } else { figcraft_engine::Session::empty() };
+            let mut app = FigApp::new(session, Box::new(crate::NoServices));
+            let called = Rc::new(Cell::new(false));
+            let seen = called.clone();
+            app.file_menu = Some(Box::new(move |_, has_doc| {
+                assert_eq!(has_doc, has_document);
+                seen.set(true);
+                true
+            }));
+            let ctx = egui::Context::default();
+            ctx.run_ui(Default::default(), |ui| {
+                assert!(menu_level(&mut app, ui, "File"));
+            })
+            .textures_delta
+            .clear();
+            assert!(called.get());
+        }
+    }
 }
 
 /// File ▸ Open recent: the recent files (greyed when the file is gone) and Clear recent. `key` is

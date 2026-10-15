@@ -6,6 +6,9 @@ edition.workspace = true
 license.workspace = true
 publish = false
 
+[features]
+icp-cloud = ["dep:sovereign-cloud-ui", "dep:figcraft-format"]
+
 [lints]
 workspace = true
 
@@ -14,7 +17,9 @@ name = "figcraft-web"
 path = "src/main.rs"
 
 [dependencies]
+sovereign-cloud-ui = { path = "../../vendor/sovereign-cloud-ui", optional = true }
 figcraft-engine = { workspace = true }
+figcraft-format = { workspace = true, optional = true }
 figcraft-ui-egui = { workspace = true }
 figcraft-collab-net = { workspace = true }
 egui = { workspace = true }
@@ -26,3 +31,7 @@ eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlCanvasElement", "Location", "MediaQueryList", "Navigator", "Gamepad", "GamepadButton", "GamepadMappingType"] }
+
+[dev-dependencies]
+image = { workspace = true }
+serde_json = { workspace = true }
