@@ -90,6 +90,8 @@ struct WebShell {
 impl eframe::App for WebShell {
     // `FigApp::ui` runs its own per-frame logic first (fonts, theme), like the desktop app.
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        #[cfg(feature = "icp-cloud")]
+        self.cloud.sync_identity(&mut crate::cloud::Adapter::new(&mut self.fig.session));
         self.fig.ui(ui);
         #[cfg(feature = "icp-cloud")]
         self.cloud.ui(ui.ctx(), &mut crate::cloud::Adapter::new(&mut self.fig.session));

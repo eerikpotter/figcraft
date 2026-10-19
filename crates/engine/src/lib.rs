@@ -626,6 +626,9 @@ pub struct Prefs {
     /// language). Languages without a catalog show English.
     pub language: String,
     /// The name comments are signed with (and whose comments count as yours).
+    /// Active host account, independent of the editable display name. Never persisted.
+    #[serde(skip)]
+    pub user_id: Option<String>,
     pub user_name: String,
     /// Reduce motion: the interface's own animations are off (the system's setting turns them off
     /// too). Prototype transitions still play.
@@ -696,6 +699,7 @@ impl Default for Prefs {
             panel_widths: (240.0, 240.0),
             pages_height: None,
             language: "system".into(),
+            user_id: None,
             user_name: cmd::comment::DEFAULT_AUTHOR.into(),
             reduce_motion: false,
             auto_save: false,

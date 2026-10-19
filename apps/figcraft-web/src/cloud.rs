@@ -64,6 +64,18 @@ fn encode(file: &DocState) -> Result<Vec<u8>, String> {
 }
 
 impl Editor for Adapter<'_> {
+    fn set_user_profile(&mut self, profile: Option<sovereign_cloud_ui::UserProfile<'_>>) {
+        let previous = self.0.prefs.user_id.is_some();
+        self.0.prefs.user_id = profile.map(|p| p.id.to_owned());
+        if let Some(profile) = profile {
+            if self.0.prefs.user_name != profile.display_name {
+                self.0.prefs.user_name = profile.display_name.to_owned();
+            }
+        } else if previous {
+            self.0.prefs.user_name = "You".into();
+        }
+    }
+
     fn document(&self) -> Option<DocumentState> {
         let file = self.file().ok()?;
         Some(DocumentState {
@@ -217,5 +229,29 @@ mod tests {
         s.begin_interaction("Dragging").unwrap();
         assert!(Adapter::new(&mut s).capture().is_err());
         assert_eq!(Adapter::new(&mut s).saved(before.id, before.revision, &bytes).unwrap(), None);
+    }
+}
+
+#[cfg(test)]
+mod identity_tests {
+    use super::*;
+
+    #[test]
+    fn account_profile_follows_host_and_cannot_restore_identity() {
+        let mut app = figcraft_engine::Session::default();
+        app.prefs.user_name = "Same display name".into();
+        for id in [None, Some("account-a"), Some("account-a"), Some("account-b"), None] {
+            Adapter::new(&mut app).set_user_profile(id.map(|id| sovereign_cloud_ui::UserProfile { id, display_name: "Subnet name" }));
+            assert_eq!(app.prefs.user_id.as_deref(), id);
+            if id.is_some() {
+                assert_eq!(app.prefs.user_name, "Subnet name");
+            }
+        }
+        Adapter::new(&mut app).set_user_profile(Some(sovereign_cloud_ui::UserProfile { id: "account-a", display_name: "Subnet name" }));
+        let saved = serde_json::to_value(&app.prefs).unwrap();
+        assert!(saved.get("user_id").is_none() && saved.get("userId").is_none());
+        let forged = serde_json::json!({"user_id": "other-account", "userId": "other-account"});
+        let restored: figcraft_engine::Prefs = serde_json::from_value(forged).unwrap();
+        assert!(restored.user_id.is_none());
     }
 }

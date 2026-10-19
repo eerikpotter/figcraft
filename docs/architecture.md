@@ -84,3 +84,11 @@ input.
 | 2026-10-11 | minor | `collab-net` hosts through one hub for the app's sessions and the standalone server; added the `figcraft-server` app |
 | 2026-10-10 | minor | Merged main after #101–#103: WASM plugins (plugins area 0% → 35% breadth, 20% ready; ecosystem 5% → 20%) and the multiplayer core without networking (multiplayer 5% → 15% breadth, 5% ready; collaboration 8% → 12%); menu breadth 97.5% → 98.5% (200/203); ready for real work ~46% → ~47%; full parity 420–790 h → 390–745 h; beta 210–380 h → 200–365 h. Fixed the stated weight sums (areas 1–16 sum to 94, total 113; percentages were already computed with those) |
 | 2026-10-10 | major | Created from the code as of PR #99 |
+
+### Subnet host identity (19 October 2026)
+
+The browser cloud adapter supplies the authenticated account's opaque `user_id`
+and Subnet account display name through `Editor::set_user_profile`. The ID is runtime context only: it is
+cleared on logout/session changes and excluded from persisted preferences. Engine
+code has no ICP dependency, and opening someone else's file does not change the
+active user. The account name overrides local author-name preferences while signed in. This hook does not yet persist author IDs in comments or change author matching.
