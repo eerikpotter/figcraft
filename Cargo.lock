@@ -274,6 +274,7 @@ dependencies = [
  "parking_lot 0.12.5",
  "percent-encoding",
  "windows-sys 0.60.2",
+ "wl-clipboard-rs",
  "x11rb",
 ]
 
@@ -1050,6 +1051,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "craft-docpath"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=82a24b006eefa036b43c09a67fb9a3fbd17ffe63#82a24b006eefa036b43c09a67fb9a3fbd17ffe63"
+
+[[package]]
 name = "crc32fast"
 version = "1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1816,7 +1822,7 @@ checksum = "28dea519a9695b9977216879a3ebfddf92f1c08c05d984f8996aecd6ecdc811d"
 
 [[package]]
 name = "figcraft"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "arboard",
  "eframe",
@@ -1830,17 +1836,20 @@ dependencies = [
  "fmv-macos-events",
  "image",
  "log",
+ "raw-window-handle",
  "rfd",
  "serde_json",
  "wat",
+ "wayland-client",
  "webbrowser",
  "windows",
+ "winit",
  "winresource",
 ]
 
 [[package]]
 name = "figcraft-cli"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "figcraft-doc",
  "figcraft-engine",
@@ -1854,7 +1863,7 @@ dependencies = [
 
 [[package]]
 name = "figcraft-collab"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "base64 0.22.1",
  "figcraft-color",
@@ -1869,7 +1878,7 @@ dependencies = [
 
 [[package]]
 name = "figcraft-collab-net"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "base64 0.22.1",
  "figcraft-collab",
@@ -1892,7 +1901,7 @@ dependencies = [
 
 [[package]]
 name = "figcraft-color"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "kurbo 0.13.1",
  "serde",
@@ -1901,7 +1910,7 @@ dependencies = [
 
 [[package]]
 name = "figcraft-doc"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "figcraft-color",
  "figcraft-geom",
@@ -1913,9 +1922,10 @@ dependencies = [
 
 [[package]]
 name = "figcraft-engine"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "base64 0.22.1",
+ "craft-docpath",
  "figcraft-collab",
  "figcraft-color",
  "figcraft-doc",
@@ -1940,7 +1950,7 @@ dependencies = [
 
 [[package]]
 name = "figcraft-format"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "figcraft-doc",
  "figcraft-pathops",
@@ -1955,7 +1965,7 @@ dependencies = [
 
 [[package]]
 name = "figcraft-geom"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "kurbo 0.13.1",
  "serde",
@@ -1963,7 +1973,7 @@ dependencies = [
 
 [[package]]
 name = "figcraft-layout"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "figcraft-doc",
  "figcraft-geom",
@@ -1971,7 +1981,7 @@ dependencies = [
 
 [[package]]
 name = "figcraft-mcp"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "base64 0.22.1",
  "figcraft-collab-net",
@@ -1987,7 +1997,7 @@ dependencies = [
 
 [[package]]
 name = "figcraft-pathops"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "figcraft-doc",
  "figcraft-geom",
@@ -1996,7 +2006,7 @@ dependencies = [
 
 [[package]]
 name = "figcraft-pdf"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "figcraft-color",
  "figcraft-doc",
@@ -2013,7 +2023,7 @@ dependencies = [
 
 [[package]]
 name = "figcraft-plugin"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "figcraft-color",
  "serde",
@@ -2026,7 +2036,7 @@ dependencies = [
 
 [[package]]
 name = "figcraft-render"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "crc32fast",
  "figcraft-color",
@@ -2044,7 +2054,7 @@ dependencies = [
 
 [[package]]
 name = "figcraft-server"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "crc32fast",
  "ctrlc",
@@ -2068,7 +2078,7 @@ dependencies = [
 
 [[package]]
 name = "figcraft-svg"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "base64 0.22.1",
  "figcraft-color",
@@ -2084,12 +2094,13 @@ dependencies = [
 
 [[package]]
 name = "figcraft-text"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "figcraft-doc",
  "figcraft-geom",
  "harfrust 0.13.3",
  "log",
+ "png 0.18.1",
  "skrifa 0.47.0",
  "unicode-bidi",
  "unicode-segmentation",
@@ -2097,7 +2108,7 @@ dependencies = [
 
 [[package]]
 name = "figcraft-ui-egui"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "base64 0.22.1",
  "egui",
@@ -2117,11 +2128,12 @@ dependencies = [
  "serde_json",
  "toml",
  "wat",
+ "web-time",
 ]
 
 [[package]]
 name = "figcraft-web"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "eframe",
  "egui",
@@ -2130,6 +2142,7 @@ dependencies = [
  "figcraft-format",
  "figcraft-ui-egui",
  "image",
+ "js-sys",
  "log",
  "serde_json",
  "sovereign-cloud-ui",
@@ -2143,6 +2156,12 @@ name = "find-msvc-tools"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
+
+[[package]]
+name = "fixedbitset"
+version = "0.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
 
 [[package]]
 name = "flate2"
@@ -3726,6 +3745,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2bf50223579dc7cdcfb3bfcacf7069ff68243f8c363f62ffa99cf000a6b9c451"
 
 [[package]]
+name = "nom"
+version = "8.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df9761775871bdef83bee530e60050f7e54b1105350d6884eb0fb4f46c2f9405"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "num-bigint"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4151,6 +4179,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "os_pipe"
+version = "1.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
+dependencies = [
+ "libc",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
 name = "p256"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4280,6 +4318,17 @@ name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
+
+[[package]]
+name = "petgraph"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8701b58ea97060d5e5b155d383a69952a60943f0e6dfe30b04c287beb0b27455"
+dependencies = [
+ "fixedbitset",
+ "hashbrown 0.15.5",
+ "indexmap",
+]
 
 [[package]]
 name = "phf"
@@ -5260,6 +5309,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
+name = "sctk-adwaita"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6277f0217056f77f1d8f49f2950ac6c278c0d607c45f5ee99328d792ede24ec"
+dependencies = [
+ "log",
+ "smithay-client-toolkit 0.19.2",
+ "tiny-skia 0.11.4",
+]
+
+[[package]]
 name = "sec1"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6162,6 +6222,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
+]
+
+[[package]]
+name = "tree_magic_mini"
+version = "3.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8765b90061cba6c22b5831f675da109ae5561588290f9fa2317adab2714d5a6"
+dependencies = [
+ "memchr",
+ "nom",
+ "petgraph",
 ]
 
 [[package]]
@@ -7366,6 +7437,7 @@ dependencies = [
  "raw-window-handle",
  "redox_syscall 0.4.1",
  "rustix 0.38.44",
+ "sctk-adwaita",
  "smithay-client-toolkit 0.19.2",
  "smol_str",
  "tracing",
@@ -7408,6 +7480,24 @@ name = "wit-bindgen"
 version = "0.57.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
+
+[[package]]
+name = "wl-clipboard-rs"
+version = "0.9.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4d7888ccd4896447b2d14d3a9350a85df2aeb6f181e2e7a31349d104ac46cac1"
+dependencies = [
+ "libc",
+ "log",
+ "os_pipe",
+ "rustix 1.1.5",
+ "thiserror 2.0.21",
+ "tree_magic_mini",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
+ "wayland-protocols-wlr",
+]
 
 [[package]]
 name = "write-fonts"
@@ -7505,7 +7595,7 @@ checksum = "9440ea3e5aeabb0ac63af70daf835274065238cdd0cec83418f417eae38bacee"
 
 [[package]]
 name = "xtask"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "figcraft-engine",
  "serde_json",

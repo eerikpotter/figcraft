@@ -6,6 +6,7 @@
 use egui::accesskit::Role;
 use egui::{Event, Key, Modifiers, PointerButton, Pos2, Rect, Shape};
 use figcraft_engine::Session;
+use figcraft_engine::online::OnlineFile;
 use figcraft_engine::templates::TEMPLATES;
 use serde_json::json;
 
@@ -185,6 +186,161 @@ fn typing_in_the_search_field_filters() {
 }
 
 #[test]
+fn home_search_finds_known_files_and_opens_an_existing_tab() {
+    let mut session = Session::new();
+    session.execute("file.rename", &json!({"name": "North Trail"})).unwrap();
+    session.docs[0].path = Some("C:/designs/North Trail.figcraft".into());
+    session.prefs.recent_files =
+        vec!["C:/designs/North Trail.figcraft".into(), "C:/designs/South Trail.figcraft".into(), "C:/designs/Other.figcraft".into()];
+    session.prefs.online_files.push(OnlineFile {
+        server: "wss://share.example/".into(),
+        file: "trail".into(),
+        name: "Trail Live".into(),
+        owner: "test-only-secret".into(),
+        ..OnlineFile::default()
+    });
+    let mut u = Ui::new(session);
+    u.app.ui.home = true;
+    u.app.ui.home_view.file_query = "  TRAIL  ".into();
+    let s = settle(&mut u);
+    assert!(has_text(&s, "Search results"));
+    assert!(has_text(&s, "North Trail") && has_text(&s, "South Trail") && has_text(&s, "Trail Live"));
+    assert!(!has_text(&s, "Other") && !has_text(&s, "test-only-secret"));
+    assert_eq!(texts(&s).iter().filter(|(name, pos, _)| name == "North Trail" && pos.y > 90.0).count(), 1, "an open file is not repeated in recents");
+    assert_eq!(u.app.inspect()["homeSearch"], "  TRAIL  ");
+
+    u.app.ui.home_view.file_query = "nothing matches".into();
+    let s = shapes(&mut u);
+    assert!(has_text(&s, "No files or templates match your search"));
+    assert!(!has_text(&s, "Trail Live") && !has_text(&s, "South Trail"));
+    assert!(!texts(&s).iter().any(|(name, pos, _)| name == "North Trail" && pos.y > 90.0));
+
+    u.app.ui.home_view.file_query = "north".into();
+    let s = shapes(&mut u);
+    click(&mut u, text_center(&s, "North Trail"));
+    assert!(!u.app.ui.home, "choosing an open result shows its editor tab");
+    assert_eq!(u.app.session.docs.len(), 1);
+}
+
+#[test]
+fn home_search_shows_a_saved_files_preview() {
+    let dir = std::env::temp_dir().join(format!("figcraft-home-search-preview-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("Search preview.figcraft");
+    let image = image::RgbaImage::from_pixel(64, 32, image::Rgba([30, 140, 210, 255]));
+    let mut png = Vec::new();
+    image.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+    let doc = figcraft_doc::Document::new("Search preview");
+    std::fs::write(&path, figcraft_format::save_bytes(&doc, Some(&png)).unwrap()).unwrap();
+
+    let mut session = Session::empty();
+    session.prefs.recent_files.push(path.to_string_lossy().into_owned());
+    let mut u = Ui::new(session);
+    u.app.ui.home_view.file_query = "Search preview".into();
+    for _ in 0..400 {
+        u.frame(vec![]);
+        if u.app.inspect()["homeRecents"]["files"][0]["picture"] == "picture" {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let s = shapes(&mut u);
+    assert!(has_text(&s, "Search preview"));
+    assert!(s.iter().any(|s| matches!(s, Shape::Mesh(m) if m.texture_id != egui::TextureId::default())), "the saved preview is drawn");
+    let _ = std::fs::remove_file(path);
+    let _ = std::fs::remove_dir(dir);
+}
+
+#[test]
+fn home_search_field_filters_as_typed_and_a_section_click_clears_it() {
+    let mut u = first_run();
+    u.app.session.prefs.recent_files = vec!["C:/designs/Glacier.figcraft".into(), "C:/designs/Forest.figcraft".into()];
+    let s = shapes(&mut u);
+    click(&mut u, text_center(&s, "Search files and templates"));
+    u.frame(vec![Event::Text("glacier".into())]);
+    let s = settle(&mut u);
+    assert_eq!(u.app.ui.home_view.file_query, "glacier");
+    assert!(has_text(&s, "Glacier") && !has_text(&s, "Forest"));
+    click(&mut u, text_center(&s, "Recents"));
+    assert!(u.app.ui.home_view.file_query.is_empty());
+    let s = shapes(&mut u);
+    assert!(has_text(&s, "Forest"));
+    // Escape in the field clears the search too.
+    click(&mut u, text_center(&s, "Search files and templates"));
+    u.frame(vec![Event::Text("forest".into())]);
+    assert_eq!(u.app.ui.home_view.file_query, "forest");
+    u.frame(vec![Event::Key { key: Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }]);
+    assert!(u.app.ui.home_view.file_query.is_empty(), "Escape clears the search");
+}
+
+/// A search keeps what the recent files it doesn't match know: back from it, their pictures and
+/// the selection are still there (nothing is read again).
+#[test]
+fn a_search_keeps_the_other_recent_files_pictures_and_the_selection() {
+    let dir = std::env::temp_dir().join(format!("figcraft-home-search-cache-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut png = Vec::new();
+    image::RgbaImage::from_pixel(8, 8, image::Rgba([30, 140, 210, 255]))
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    let paths: Vec<String> = ["Alpine", "Basin"]
+        .into_iter()
+        .map(|name| {
+            let path = dir.join(format!("{name}.figcraft"));
+            std::fs::write(&path, figcraft_format::save_bytes(&figcraft_doc::Document::new(name), Some(&png)).unwrap()).unwrap();
+            path.to_string_lossy().into_owned()
+        })
+        .collect();
+    let mut session = Session::empty();
+    session.prefs.recent_files = paths.clone();
+    let mut u = Ui::new(session);
+    let pictures = |u: &mut Ui| -> Vec<serde_json::Value> {
+        u.app.inspect()["homeRecents"]["files"].as_array().unwrap().iter().map(|f| f["picture"].clone()).collect()
+    };
+    for _ in 0..400 {
+        u.frame(vec![]);
+        if pictures(&mut u).iter().all(|p| p == "picture") {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(pictures(&mut u).iter().all(|p| p == "picture"), "both pictures are in");
+    u.app.ui.home_view.recents.selected = Some(paths[1].clone());
+    u.app.ui.home_view.file_query = "alpine".into();
+    let s = shapes(&mut u);
+    assert!(has_text(&s, "Alpine") && !has_text(&s, "Basin"));
+    u.app.ui.home_view.file_query.clear();
+    u.frame(vec![]);
+    assert!(pictures(&mut u).iter().all(|p| p == "picture"), "no picture is read again");
+    assert_eq!(u.app.ui.home_view.recents.selected.as_deref(), Some(paths[1].as_str()), "the selection stays");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn home_search_includes_templates_and_opens_a_matching_card() {
+    let mut u = first_run();
+    u.app.ui.home_view.file_query = "MOBILE".into();
+    let s = settle(&mut u);
+    assert!(has_text(&s, "Templates") && has_text(&s, "Mobile app"));
+    assert!(!has_text(&s, "Dashboard"));
+    click(&mut u, text_center(&s, "Mobile app"));
+    assert_eq!(u.app.session.doc().unwrap().name, "Mobile app");
+    assert!(!u.app.ui.home);
+}
+
+#[test]
+fn empty_home_search_can_browse_all_templates() {
+    let mut u = first_run();
+    u.app.ui.home_view.file_query = "no such design".into();
+    let s = shapes(&mut u);
+    assert!(has_text(&s, "No files or templates match your search"));
+    click(&mut u, text_center(&s, "Show all templates"));
+    assert!(u.app.ui.home_view.file_query.is_empty());
+    assert_eq!(u.app.ui.home_view.section, Section::Templates);
+    assert!(has_text(&settle(&mut u), "Dashboard"));
+}
+
+#[test]
 fn thumbnails_are_cached_per_theme() {
     let mut u = first_run();
     templates_tab(&mut u);
@@ -326,4 +482,282 @@ fn tab_walks_the_sidebar_in_order_before_a_sections_controls() {
     }
     let at = |name: &str| names.iter().position(|n| n == name).unwrap_or_else(|| panic!("Tab never reached {name:?}: {names:?}"));
     assert!(at("Recents") < at("Online") && at("Online") < at("Templates") && at("Templates") < at("Open file"), "{names:?}");
+}
+
+/// A temporary directory of its own for a test's files, removed with them when dropped.
+struct Temp(std::path::PathBuf);
+
+impl Temp {
+    fn new() -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!("figcraft-home-drop-{}-{stamp}-{n}", std::process::id()));
+        std::fs::create_dir(&path).unwrap();
+        Self(path)
+    }
+
+    fn path(&self, name: &str) -> std::path::PathBuf {
+        self.0.join(name)
+    }
+}
+
+impl Drop for Temp {
+    fn drop(&mut self) {
+        if let Ok(files) = std::fs::read_dir(&self.0) {
+            for file in files.flatten() {
+                let _ = std::fs::remove_file(file.path());
+            }
+        }
+        let _ = std::fs::remove_dir(&self.0);
+    }
+}
+
+/// A file dropped on the window, as the windowing backend hands it over (read from its path).
+#[derive(Debug)]
+struct Dropped(std::path::PathBuf);
+
+impl egui::DroppedFile for Dropped {
+    fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+
+    fn bytes(&self) -> Result<Vec<u8>, String> {
+        std::fs::read(&self.0).map_err(|e| e.to_string())
+    }
+}
+
+/// Drag `path` over the window (one frame: what it shows), then drop it (one frame).
+fn drop_file(u: &mut Ui, path: &std::path::Path) -> Vec<Shape> {
+    let hovered = egui::HoveredFile { path: Some(path.to_path_buf()), mime: String::new() };
+    let hovering = flat(&u.frame_raw(egui::RawInput { hovered_files: vec![hovered], ..Default::default() }).shapes);
+    let file: egui::DroppedFileHandle = std::sync::Arc::new(Dropped(path.to_path_buf()));
+    u.frame_raw(egui::RawInput { dropped_files: vec![file], ..Default::default() });
+    hovering
+}
+
+/// A file dropped with its contents but no file on disk (a virtual file from another app).
+#[derive(Debug)]
+struct DroppedBytes(std::path::PathBuf, Vec<u8>);
+
+impl egui::DroppedFile for DroppedBytes {
+    fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+
+    fn bytes(&self) -> Result<Vec<u8>, String> {
+        Ok(self.1.clone())
+    }
+}
+
+#[test]
+fn dropping_a_file_without_one_on_disk_opens_it_as_a_new_unsaved_document() {
+    let dir = Temp::new();
+    let path = dir.path("virtual.svg");
+    assert!(!path.exists());
+    let svg = br#"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="red"/></svg>"#.to_vec();
+    let mut u = first_run();
+    u.app.ui.home = true;
+    let file: egui::DroppedFileHandle = std::sync::Arc::new(DroppedBytes(path.clone(), svg));
+    u.frame_raw(egui::RawInput { dropped_files: vec![file], ..Default::default() });
+    assert_eq!(u.app.ui.pending_opens.len(), 1);
+    for _ in 0..3 {
+        u.frame(vec![]);
+    }
+    assert!(u.app.ui.pending_opens.is_empty());
+    assert_eq!(u.app.ui.last_error, None);
+    assert_eq!(u.app.session.docs.len(), 1, "the dropped contents open");
+    assert_eq!(u.app.session.docs[0].path, None, "with no save path made up for them");
+    assert!(u.app.session.docs[0].doc.nodes().any(|n| matches!(n.kind, figcraft_doc::NodeKind::Rectangle)), "the SVG's content");
+    assert!(!u.app.ui.home, "and the editor shows it");
+    assert!(!path.exists(), "nothing is written");
+}
+
+#[test]
+fn dropping_a_native_file_on_the_home_screen_opens_it() {
+    let dir = Temp::new();
+    let path = dir.path("Dropped.figcraft");
+    let mut saved = Session::new();
+    saved.execute("file.saveAs", &json!({"path": path.to_string_lossy()})).unwrap();
+    assert!(path.exists());
+    let mut u = first_run();
+    u.app.ui.home = true;
+    let s = drop_file(&mut u, &path);
+    assert!(has_text(&s, "Drop to open"), "dragging over the home screen says what a drop does");
+    // The file waits behind its card, which is on screen before it opens.
+    assert_eq!(u.app.ui.pending_opens.len(), 1);
+    assert!(u.app.session.docs.is_empty(), "nothing opens in the frame of the drop");
+    let s = flat(&u.frame_output(vec![]).shapes);
+    assert!(has_text(&s, "Opening as a new file") && has_text(&s, "Opening the file…") && has_text(&s, "Dropped.figcraft"), "the card shows");
+    assert_eq!(u.app.ui.pending_opens.len(), 1);
+    assert!(u.app.session.docs.is_empty(), "the card is drawn first");
+    assert_eq!(u.app.inspect()["pendingOpens"], 1);
+    u.frame(vec![]);
+    assert!(u.app.ui.pending_opens.is_empty());
+    assert_eq!(u.app.session.docs.len(), 1);
+    assert_eq!(u.app.session.docs[0].path.as_deref(), Some(path.to_string_lossy().as_ref()));
+    assert!(!u.app.ui.home, "and the editor shows it");
+    assert!(u.app.ui.toast.as_ref().is_none_or(|t| !t.0.starts_with("Drop a")), "no turning away");
+}
+
+#[test]
+fn dropping_a_native_file_on_canvas_keeps_its_receiving_document_after_tab_switch() {
+    let dir = Temp::new();
+    let path = dir.path("Canvas import.figcraft");
+    let mut source = Session::new();
+    source.execute("file.saveAs", &json!({"path": path.to_string_lossy()})).unwrap();
+
+    let mut session = Session::new();
+    let target_uid = session.ds().unwrap().uid;
+    let target_page = session.page().unwrap();
+    let target_name = session.doc().unwrap().name.clone();
+    session.execute("file.new", &json!({"name": "Other tab"})).unwrap();
+    let other_uid = session.ds().unwrap().uid;
+    session.active = 0;
+    let mut u = Ui::new(session);
+    u.app.ui.home = false;
+    u.frame(vec![]);
+    let pos = u.app.canvas.rect.center();
+    let file: egui::DroppedFileHandle = std::sync::Arc::new(Dropped(path.clone()));
+    u.frame_raw(egui::RawInput { events: vec![Event::PointerMoved(pos)], dropped_files: vec![file], ..Default::default() });
+    let pending = u.app.ui.pending_opens.first().unwrap();
+    assert_eq!(pending.target.as_ref().map(|target| (target.uid, target.page)), Some((target_uid, target_page)));
+    assert_eq!(pending.target.as_ref().map(|target| target.name.as_str()), Some(target_name.as_str()));
+
+    u.frame(vec![]);
+    u.app.session.active = 1;
+    assert_eq!(u.app.session.ds().unwrap().uid, other_uid, "the UI switched tabs while the card was displayed");
+    assert_eq!(u.app.ui.pending_opens.len(), 1, "the switch happens before dispatch");
+    u.frame(vec![]);
+
+    assert_eq!(u.app.session.ds().unwrap().uid, other_uid, "the user's active tab stays in front");
+    assert_eq!(u.app.session.docs.iter().map(|doc| doc.doc.pages.len()).collect::<Vec<_>>(), [2, 1]);
+}
+
+#[test]
+fn canvas_import_uses_queued_page_and_restores_the_page_selected_while_waiting() {
+    let dir = Temp::new();
+    let path = dir.path("Queued.svg");
+    std::fs::write(&path, r##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"><rect width="20" height="10" fill="#f00"/></svg>"##)
+        .unwrap();
+
+    let mut session = Session::new();
+    let target_uid = session.ds().unwrap().uid;
+    let first_page = session.page().unwrap();
+    session.execute("page.add", &json!({"name": "Second page"})).unwrap();
+    let second_page = session.page().unwrap();
+    let second_page_shape = session.execute("node.create", &json!({"type": "rectangle", "x": 30, "y": 40, "width": 12, "height": 14})).unwrap()["id"]
+        .as_u64()
+        .map(figcraft_doc::NodeId)
+        .unwrap();
+    session.execute("page.select", &json!({"id": first_page})).unwrap();
+    session.execute("file.new", &json!({"name": "Other tab"})).unwrap();
+    let other_uid = session.ds().unwrap().uid;
+    session.active = 0;
+    let mut u = Ui::new(session);
+    u.app.ui.home = false;
+    u.frame(vec![]);
+    let pos = u.app.canvas.rect.center();
+    let file: egui::DroppedFileHandle = std::sync::Arc::new(Dropped(path));
+    u.frame_raw(egui::RawInput { events: vec![Event::PointerMoved(pos)], dropped_files: vec![file], ..Default::default() });
+    let queued_params = u.app.ui.pending_opens[0].params.clone();
+    assert_eq!(u.app.ui.pending_opens[0].target.as_ref().map(|target| (target.uid, target.page)), Some((target_uid, first_page)));
+
+    u.frame(vec![]);
+    u.app.session.execute("page.select", &json!({"id": second_page})).unwrap();
+    u.app.session.execute("select.set", &json!({"ids": [second_page_shape]})).unwrap();
+    u.app.session.active = 1;
+    u.frame(vec![]);
+    let target_index = u.app.session.docs.iter().position(|doc| doc.uid == target_uid).unwrap();
+    let imported = u.app.session.docs[target_index].doc.node(first_page).unwrap().children[0];
+    let doc = &u.app.session.docs[target_index].doc;
+    assert_eq!(doc.page_of(imported), Some(first_page));
+    let bounds = doc.world_bounds(imported).unwrap();
+    assert!((bounds.x0 - queued_params["x"].as_f64().unwrap()).abs() < 1.0);
+    assert!((bounds.y0 - queued_params["y"].as_f64().unwrap()).abs() < 1.0);
+    assert_eq!(doc.node(second_page).unwrap().children, [second_page_shape]);
+    assert_eq!(u.app.session.ds().unwrap().uid, other_uid);
+    assert_eq!(u.app.session.docs[target_index].page, second_page, "the page selected during the wait is restored");
+    assert_eq!(u.app.session.docs[target_index].selection, [second_page_shape], "the restored page keeps its selection");
+
+    u.app.session.active = target_index;
+    u.app.session.execute("edit.delete", &json!({})).unwrap();
+    let doc = &u.app.session.docs[target_index].doc;
+    assert!(doc.node(second_page).unwrap().children.is_empty(), "the next edit acts on the restored page selection");
+    assert_eq!(doc.node(first_page).unwrap().children.len(), 1, "the imported object on the queued page remains");
+}
+
+#[test]
+fn queued_canvas_import_is_cancelled_if_its_page_is_deleted() {
+    let dir = Temp::new();
+    let path = dir.path("Removed target.svg");
+    std::fs::write(&path, r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"><rect width="20" height="10"/></svg>"#).unwrap();
+
+    let mut session = Session::new();
+    let target_uid = session.ds().unwrap().uid;
+    session.execute("page.add", &json!({"name": "Keep this page"})).unwrap();
+    let target_page = session.page().unwrap();
+    session.execute("file.new", &json!({"name": "Other tab"})).unwrap();
+    let other_uid = session.ds().unwrap().uid;
+    session.active = 0;
+    let mut u = Ui::new(session);
+    u.app.ui.home = false;
+    u.frame(vec![]);
+    let pos = u.app.canvas.rect.center();
+    let file: egui::DroppedFileHandle = std::sync::Arc::new(Dropped(path));
+    u.frame_raw(egui::RawInput { events: vec![Event::PointerMoved(pos)], dropped_files: vec![file], ..Default::default() });
+    u.app.session.execute("page.delete", &json!({"id": target_page})).unwrap();
+    let other_before = u.app.session.docs.iter().find(|doc| doc.uid == other_uid).unwrap().doc.clone();
+    u.app.ui.pending_open_frames = 2;
+    crate::pending_open::pending_opens(&mut u.app, &u.ctx);
+    assert_eq!(u.app.session.docs.iter().find(|doc| doc.uid == other_uid).unwrap().doc, other_before);
+    let target = u.app.session.docs.iter().find(|doc| doc.uid == target_uid).unwrap();
+    assert_eq!(target.doc.pages.len(), 1);
+    assert!(!target.doc.nodes().any(|node| node.name == "Removed target"));
+    assert!(u.app.ui.last_error.as_deref().is_some_and(|error| error.contains("destination page was removed")));
+}
+
+#[test]
+fn queued_canvas_import_is_cancelled_if_its_document_is_closed() {
+    let dir = Temp::new();
+    let path = dir.path("Closed target.svg");
+    std::fs::write(&path, r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"><rect width="20" height="10"/></svg>"#).unwrap();
+
+    let mut session = Session::new();
+    let target_uid = session.ds().unwrap().uid;
+    session.execute("file.new", &json!({"name": "Other tab"})).unwrap();
+    let other_uid = session.ds().unwrap().uid;
+    session.active = 0;
+    let mut u = Ui::new(session);
+    u.app.ui.home = false;
+    u.frame(vec![]);
+    let pos = u.app.canvas.rect.center();
+    let file: egui::DroppedFileHandle = std::sync::Arc::new(Dropped(path));
+    u.frame_raw(egui::RawInput { events: vec![Event::PointerMoved(pos)], dropped_files: vec![file], ..Default::default() });
+    u.frame(vec![]);
+    let other_before = u.app.session.docs.iter().find(|doc| doc.uid == other_uid).unwrap().doc.clone();
+    let target_index = u.app.session.docs.iter().position(|doc| doc.uid == target_uid).unwrap();
+    u.app.session.docs.remove(target_index);
+    u.app.session.active = 0;
+
+    while !u.app.ui.pending_opens.is_empty() {
+        u.frame(vec![]);
+    }
+    assert_eq!(u.app.session.docs.len(), 1);
+    assert_eq!(u.app.session.ds().unwrap().uid, other_uid);
+    assert_eq!(u.app.session.doc().unwrap(), other_before.as_ref());
+    assert!(u.app.ui.last_error.as_deref().is_some_and(|error| error.contains("destination document was closed")));
+}
+
+#[test]
+fn dropping_an_unsupported_file_on_the_home_screen_opens_nothing() {
+    let dir = Temp::new();
+    let path = dir.path("unsupported.txt");
+    std::fs::write(&path, "not a design").unwrap();
+    let mut u = first_run();
+    u.app.ui.home = true;
+    drop_file(&mut u, &path);
+    assert!(u.app.session.docs.is_empty());
+    assert!(u.app.ui.home);
+    assert_eq!(u.app.ui.toast.as_ref().map(|t| t.0.as_str()), Some("Drop a .figcraft, .fig, .json, .svg or image file."));
 }

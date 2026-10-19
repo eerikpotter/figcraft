@@ -40,6 +40,37 @@ pub fn editor(ctx: &egui::Context) -> Option<(NodeId, usize)> {
     ctx.data(|d| d.get_temp(editor_id()))
 }
 
+/// Delete the selected interaction (when one is active in the Prototype tab).
+/// Returns true if an interaction was deleted.
+pub fn delete_selected_interaction(app: &mut FigApp, ctx: &egui::Context) -> bool {
+    if app.ui.right_tab != crate::RightTab::Prototype {
+        return false;
+    }
+    let Some((node, index)) = editor(ctx) else { return false };
+    let Ok(ds) = app.session.ds() else { return false };
+    if ds.doc.node(node).and_then(|n| n.interactions.get(index)).is_none() {
+        open_editor(ctx, None);
+        return false;
+    }
+    open_editor(ctx, None);
+    let ids = targets_for(app, node);
+    app.run("proto.interaction.remove", json!({"ids": ids, "index": index}));
+    true
+}
+
+/// Close the interaction editor if open. Returns true if it was open.
+pub fn close_editor(ctx: &egui::Context) -> bool {
+    if capturing(ctx) || crate::variable_ui::picker_open(ctx) {
+        return false;
+    }
+    if editor(ctx).is_some() {
+        open_editor(ctx, None);
+        true
+    } else {
+        false
+    }
+}
+
 const TRIGGERS: [&str; 10] = [
     tr_noop("On click"),
     tr_noop("On drag"),
@@ -455,7 +486,7 @@ fn settings(app: &mut FigApp, ui: &mut Ui, doc: &Document, page: NodeId) {
     row(ui, 32.0, |ui| {
         widgets::swatch(ui, &Paint::solid(bg), 16.0);
         if let Some(h) = widgets::text_field(ui, Id::new("proto_bg"), &bg.to_hex(), 96.0, "")
-            && let Some(c) = figcraft_color::Color::from_hex(&h)
+            && let Some(c) = figcraft_color::Color::from_hex_or_name(&h)
         {
             app.run("proto.settings", json!({"background": c.to_css_hex()}));
         }
@@ -607,8 +638,6 @@ fn interactions(app: &mut FigApp, ui: &mut Ui, doc: &Document, page: NodeId, nod
 #[allow(clippy::too_many_arguments)]
 fn editor_popover(app: &mut FigApp, ctx: &egui::Context, doc: &Document, page: NodeId, node: NodeId, k: usize, it: &Interaction, at: Pos2) {
     let t = Tokens::get(ctx);
-    // Escape in a field (it cancels the edit) doesn't close the editor.
-    let typing = ctx.egui_wants_keyboard_input();
     let width = 280.0;
     let screen = ctx.content_rect();
     let pos = pos2(at.x - width, at.y.min(screen.max.y - 420.0).max(screen.min.y + 48.0));
@@ -652,8 +681,7 @@ fn editor_popover(app: &mut FigApp, ctx: &egui::Context, doc: &Document, page: N
                 });
             });
     });
-    let escape = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && !typing && !capturing(ctx) && !crate::variable_ui::picker_open(ctx);
-    if close || escape {
+    if close {
         open_editor(ctx, None);
     }
 }
@@ -700,7 +728,7 @@ fn trigger_rows(app: &mut FigApp, ui: &mut Ui, node: NodeId, k: usize, it: &Inte
             row(ui, 32.0, |ui| {
                 widgets::label(ui, tr("Delay"), t.text_secondary);
                 let id = Id::new(("proto_mouse_delay", node, k));
-                if let Some(FieldEdit::Set(v) | FieldEdit::Scrub(v, _)) =
+                if let Some(FieldEdit::Set(v) | FieldEdit::Scrub(v, true)) =
                     widgets::number_field(ui, id, Lead::None, Some(f64::from(it.delay_ms)), "ms", 96.0, 10.0)
                     && v.is_finite()
                 {
@@ -711,13 +739,11 @@ fn trigger_rows(app: &mut FigApp, ui: &mut Ui, node: NodeId, k: usize, it: &Inte
         Trigger::AfterDelay { ms } => {
             row(ui, 32.0, |ui| {
                 widgets::label(ui, tr("Delay"), t.text_secondary);
-                if let Some(e) = widgets::number_field(ui, Id::new(("proto_delay", node, k)), Lead::None, Some(f64::from(*ms)), "ms", 96.0, 10.0) {
-                    let v = match e {
-                        FieldEdit::Set(v) | FieldEdit::Scrub(v, _) => v,
-                    };
-                    if v.is_finite() {
-                        patch(app, node, k, json!({"trigger": {"type": "afterDelay", "ms": v.clamp(0.0, 600_000.0).round() as u32}}));
-                    }
+                if let Some(FieldEdit::Set(v) | FieldEdit::Scrub(v, true)) =
+                    widgets::number_field(ui, Id::new(("proto_delay", node, k)), Lead::None, Some(f64::from(*ms)), "ms", 96.0, 10.0)
+                    && v.is_finite()
+                {
+                    patch(app, node, k, json!({"trigger": {"type": "afterDelay", "ms": v.clamp(0.0, 600_000.0).round() as u32}}));
                 }
             });
         }
@@ -851,9 +877,10 @@ pub(crate) fn action_fields(app: &mut FigApp, ui: &mut Ui, doc: &Document, page:
             row(ui, 32.0, |ui| {
                 let w = ((ui.available_width() - 6.0) / 2.0).max(36.0);
                 for (i, (name, key)) in [("X", "proto_scroll_x"), ("Y", "proto_scroll_y")].into_iter().enumerate() {
-                    let Some(e) = widgets::number_field(ui, slot.id(key), Lead::Text(name), offset.get(i).copied(), "", w, 1.0) else { continue };
-                    let v = match e {
-                        FieldEdit::Set(v) | FieldEdit::Scrub(v, _) => v,
+                    let Some(FieldEdit::Set(v) | FieldEdit::Scrub(v, true)) =
+                        widgets::number_field(ui, slot.id(key), Lead::Text(name), offset.get(i).copied(), "", w, 1.0)
+                    else {
+                        continue;
                     };
                     if v.is_finite() {
                         let mut o = offset;
@@ -901,7 +928,7 @@ pub(crate) fn action_fields(app: &mut FigApp, ui: &mut Ui, doc: &Document, page:
                         else {
                             continue;
                         };
-                        let Some(FieldEdit::Set(v) | FieldEdit::Scrub(v, _)) = e.settled() else { continue };
+                        let Some(FieldEdit::Set(v) | FieldEdit::Scrub(v, true)) = e.settled() else { continue };
                         if v.is_finite() {
                             let mut o = offset.unwrap_or([0.0, 0.0]);
                             if let Some(slot_v) = o.get_mut(i) {
@@ -927,23 +954,17 @@ pub(crate) fn action_fields(app: &mut FigApp, ui: &mut Ui, doc: &Document, page:
                 row(ui, 32.0, |ui| {
                     widgets::swatch(ui, &Paint::solid(bg), 16.0);
                     if let Some(h) = widgets::text_field(ui, slot.id("proto_ovbg"), &bg.to_hex(), 96.0, "")
-                        && let Some(c) = figcraft_color::Color::from_hex(&h)
+                        && let Some(c) = figcraft_color::Color::from_hex_or_name(&h)
                     {
                         set_action(app, slot, Action::OpenOverlay { dest, position, close_on_outside, background: Some(c), offset });
                     }
                     let alpha = (bg.a * 100.0).round();
-                    if let Some(e) = widgets::number_field(ui, slot.id("proto_ovbg_a"), Lead::None, Some(f64::from(alpha)), "%", 64.0, 1.0) {
-                        let v = match e {
-                            FieldEdit::Set(v) | FieldEdit::Scrub(v, _) => v,
-                        };
-                        if v.is_finite() {
-                            let a = v.clamp(0.0, 100.0) as f32 / 100.0;
-                            set_action(
-                                app,
-                                slot,
-                                Action::OpenOverlay { dest, position, close_on_outside, background: Some(bg.with_alpha(a)), offset },
-                            );
-                        }
+                    if let Some(FieldEdit::Set(v) | FieldEdit::Scrub(v, true)) =
+                        widgets::number_field(ui, slot.id("proto_ovbg_a"), Lead::None, Some(f64::from(alpha)), "%", 64.0, 1.0)
+                        && v.is_finite()
+                    {
+                        let a = v.clamp(0.0, 100.0) as f32 / 100.0;
+                        set_action(app, slot, Action::OpenOverlay { dest, position, close_on_outside, background: Some(bg.with_alpha(a)), offset });
                     }
                 });
             }
